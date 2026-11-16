@@ -11,12 +11,12 @@
       Leave the "YOUR_..." placeholders in place to run in Local (offline) mode.
    -------------------------------------------------------------------------- */
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyCs-tYC1lrGt7ASf55zEQ50Q_ZARe6taEY",
+  authDomain: "media-operator-tool.firebaseapp.com",
+  projectId: "media-operator-tool",
+  storageBucket: "media-operator-tool.firebasestorage.app",
+  messagingSenderId: "1036073291573",
+  appId: "1:1036073291573:web:bdc66367c5b3efdd6dc67c"
 };
 
 // Optional: sign in anonymously so Firestore rules can require `request.auth != null`.
