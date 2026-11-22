@@ -38,6 +38,8 @@ let uid = null;
 let messages = [];
 let lastSeen = Number(localStorage.getItem(SEEN_KEY) || 0);
 let firstSnapshot = true;
+let unsubscribeMessages = null;
+let listening = false;
 
 const getName = () => (localStorage.getItem(NAME_KEY) || "").trim();
 
@@ -54,6 +56,13 @@ function askName(force = false) {
 function setStatus(state, text) {
   el.status.dataset.state = state;
   el.status.textContent = text;
+}
+
+function authErrorMessage(err) {
+  if (err.code === "auth/admin-restricted-operation" || err.code === "auth/operation-not-allowed") {
+    return "Enable anonymous sign-in in Firebase Authentication";
+  }
+  return `Chat sign-in failed${err.code ? ` (${err.code})` : ""}`;
 }
 
 function isOpen() { return !el.panel.hidden; }
@@ -156,11 +165,19 @@ try {
   const auth = getAuth(app);
 
   onAuthStateChanged(auth, (user) => {
+    if (unsubscribeMessages) unsubscribeMessages();
+    unsubscribeMessages = null;
+    listening = false;
+    uid = user ? user.uid : null;
     if (!user) return;
-    uid = user.uid;
-    setStatus("live", "Live");
+    setStatus("connecting", "Connecting…");
     const q = query(msgsRef, orderBy("createdAt", "asc"), limitToLast(MAX_MESSAGES));
-    onSnapshot(q, { includeMetadataChanges: false }, (snap) => {
+    listening = true;
+    unsubscribeMessages = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
+      setStatus(snap.metadata.fromCache ? (navigator.onLine ? "connecting" : "error") : "live",
+        snap.metadata.fromCache
+          ? (navigator.onLine ? "Connecting… (cached messages)" : "Offline – showing cached messages")
+          : "Live");
       const incoming = [];
       snap.docChanges().forEach((c) => {
         if (c.type === "added" && !firstSnapshot) {
@@ -174,22 +191,29 @@ try {
       if (incoming.length) notify(incoming);
       firstSnapshot = false;
     }, (err) => {
-      console.error(err);
-      setStatus("error", "Chat unavailable");
+      listening = false;
+      console.error("Chat listener failed", err);
+      setStatus("error", err.code === "permission-denied"
+        ? "Chat access denied – check Firestore rules"
+        : `Chat unavailable${err.code ? ` (${err.code})` : ""}`);
     });
   });
 
   signInAnonymously(auth).catch((err) => {
-    console.error(err);
-    setStatus("error", "Offline – cannot connect");
+    console.error("Chat sign-in failed", err);
+    setStatus("error", authErrorMessage(err));
   });
 } catch (err) {
   console.error(err);
   setStatus("error", "Chat not configured");
 }
 
-window.addEventListener("online", () => uid && setStatus("live", "Live"));
-window.addEventListener("offline", () => setStatus("error", "Offline – messages will send when reconnected"));
+window.addEventListener("online", () => {
+  if (listening) setStatus("connecting", "Connecting…");
+});
+window.addEventListener("offline", () => {
+  if (listening) setStatus("error", "Offline – messages will send when reconnected");
+});
 
 // ---- UI events ----
 el.fab.addEventListener("click", () => (isOpen() ? closeChat() : openChat()));
@@ -208,7 +232,7 @@ el.form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = el.input.value.trim().slice(0, 1000);
   if (!text) return;
-  if (!uid || !msgsRef) { setStatus("error", "Not connected"); return; }
+  if (!uid || !msgsRef || !listening) return;
   const name = askName();
   if (!name) return;
 
@@ -223,8 +247,10 @@ el.form.addEventListener("submit", async (e) => {
     el.input.value = "";
     autosize();
   } catch (err) {
-    console.error(err);
-    alert("Message could not be sent. Check your connection and try again.");
+    console.error("Chat message send failed", err);
+    alert(err.code === "permission-denied"
+      ? "Message could not be sent. Check the Firestore rules for chat."
+      : `Message could not be sent${err.code ? ` (${err.code})` : ""}. Check your connection and try again.`);
   } finally {
     el.send.disabled = false;
     el.input.focus();
