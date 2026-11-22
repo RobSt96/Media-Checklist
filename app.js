@@ -19,9 +19,9 @@ const firebaseConfig = {
   appId: "1:1036073291573:web:bdc66367c5b3efdd6dc67c"
 };
 
-// Optional: sign in anonymously so Firestore rules can require `request.auth != null`.
+// Sign in anonymously before checklist sync so rules can require `request.auth != null`.
 // Enable "Anonymous" in Firebase console → Authentication → Sign-in method first.
-const USE_ANONYMOUS_AUTH = false;
+const USE_ANONYMOUS_AUTH = true;
 
 // Where the single shared document lives: /sundayMedia/main
 const FS_COLLECTION = "sundayMedia";

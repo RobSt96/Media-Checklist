@@ -60,52 +60,47 @@ const firebaseConfig = {
 
 Team chat always uses anonymous authentication, even when the checklist does not. In **Authentication → Get started → Sign-in method**, enable **Anonymous**. Under **Authentication → Settings → Authorized domains**, add your GitHub Pages domain and any other domain used to access the app. Add `localhost` if you use it for local testing and it is not already listed.
 
-The checklist can optionally use the same anonymous authentication: set `USE_ANONYMOUS_AUTH = true` in `app.js` if your checklist rules require a signed-in user. Leave it `false` if your checklist rules permit unauthenticated access.
+The checklist also uses anonymous authentication by default (`USE_ANONYMOUS_AUTH = true` in `app.js`) and waits for sign-in before connecting to Firestore. Enable Anonymous sign-in before deploying the app.
 
 ## 4. Set Firestore security rules
 
-In **Firestore Database → Rules**, use rules appropriate for your existing project. The following alternatives cover both the checklist and chat. If you already have rules for other collections, preserve those rules rather than replacing them with these examples.
-
-**Option A: simplest.** Anyone can read and write the checklist; anonymous users can read and write chat:
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /sundayMedia/{docId} {
-      allow read, write: if true;
-    }
-    match /chat/{messageId} {
-      allow read, write: if request.auth != null;
-    }
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
-}
-```
-
-**Option B: slightly stronger.** Require anonymous sign-in for both the checklist and chat:
+In **Firestore Database → Rules**, publish the following rules. They allow authenticated reads, creation and updates of the checklist at `/sundayMedia/main`, while preserving chat message validation and preventing client-side deletion. If you already have rules for other collections, preserve those rules rather than replacing them.
 
 1. Enable anonymous sign-in as described in step 3.
-2. In `app.js`, set `const USE_ANONYMOUS_AUTH = true;`.
-3. Use rules such as:
+2. Keep `const USE_ANONYMOUS_AUTH = true;` in `app.js`.
+3. Paste these rules into the Firebase console and click **Publish**:
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /sundayMedia/{docId} {
-      allow read, write: if request.auth != null;
+    match /sundayMedia/main {
+      allow read, create, update: if request.auth != null;
+      allow delete: if false;
     }
-    match /chat/{messageId} {
-      allow read, write: if request.auth != null;
+    match /chat/{msgId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['text','name','uid','createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1000
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 40
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
     }
   }
 }
 ```
 
-Publish the rules, then reload the app. Anonymous sign-in is available to anyone who can access the app; these example rules do not restrict access to your team or prevent anonymous users from editing or deleting data.
+Deploy the updated `app.js`, then reload the app. Editing this README does not deploy Firebase rules; publishing them in the Firebase console is a separate manual step. Verify that the header says **Live**, tick an item, and confirm that it appears ticked in a second browser or device.
+
+Rules that only match `/chat/{msgId}` deny checklist access and cause `permission-denied` when saving ticks. The checklist needs both read and write permissions for `/sundayMedia/main`.
+
+Anonymous sign-in is available to anyone who can access the app; these rules do not restrict access to your team. Anonymous users can edit the shared checklist and read or create chat messages, but cannot delete the checklist or update/delete chat messages.
 
 > ⚠️ The 4-digit PIN is a **UI lock** that stops accidental edits during a service. It is **not** real security, because the PIN is stored in the same document. Don't put anything sensitive in this app.
 
